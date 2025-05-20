@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markdown Preview</title>
+    <title>Markdown Editor with Live Preview</title>
     <!-- 添加 favicon -->
     <link rel="shortcut icon" href="../assets/images/favicon.ico" type="image/x-icon">
     <link rel="icon" href="../assets/images/favicon.ico" type="image/x-icon">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * {
@@ -147,14 +146,6 @@
             background-color: #f8f9fa;
             border-bottom: 2px solid #dee2e6;
         }
-        /* Custom column widths for preview tables */
-        /* #preview table th:nth-child(1),
-        #preview table td:nth-child(1),
-        #preview table th:nth-child(2),
-        #preview table td:nth-child(2) {
-            width: unset;
-            max-width: unset;
-        } */
     </style>
 </head>
 <body>
@@ -165,29 +156,149 @@
             <a href="mdpreview.html" class="nav-link active">Markdown 預覽</a>
         </div>
     </nav>
-    <div class="container mt-5">
-        <h2>Markdown Preview</h2>
-        <div class="row">
-            <div class="col-md-6">
-                <textarea id="markdownInput" class="form-control" rows="10" placeholder="Enter Markdown here..."></textarea>
-            </div>
-            <div class="col-md-6">
-                <div id="preview" class="border p-3"></div>
-            </div>
+    <div class="container">
+        <div class="editor-container">
+            <textarea id="editor" placeholder="Write your Markdown here..."></textarea>
+        </div>
+        <div class="resizer" id="resizer"></div>
+        <div class="preview-container">
+            <div id="preview"></div>
         </div>
     </div>
 
     <script>
-        const markdownInput = document.getElementById('markdownInput');
+        const editor = document.getElementById('editor');
         const preview = document.getElementById('preview');
+        const resizer = document.getElementById('resizer');
+        const container = document.querySelector('.container');
+        const editorContainer = document.querySelector('.editor-container');
+        const previewContainer = document.querySelector('.preview-container');
 
-        function updatePreview() {
-            const markdown = markdownInput.value;
-            const html = marked.parse(markdown);
-            preview.innerHTML = html;
+        // Initialize marked options
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+
+        // 預設 3:7 分割
+        function setInitialSplit() {
+            const containerWidth = container.offsetWidth;
+            editorContainer.style.flex = `0 0 ${containerWidth * 0.3}px`;
+            previewContainer.style.flex = `0 0 ${containerWidth * 0.7}px`;
         }
 
-        markdownInput.addEventListener('input', updatePreview);
+        window.addEventListener('DOMContentLoaded', setInitialSplit);
+        window.addEventListener('resize', setInitialSplit);
+
+        // Update preview when editor content changes
+        editor.addEventListener('input', () => {
+            renderPreview();
+        });
+
+        // Resizer functionality
+        let isResizing = false;
+        let lastDownX = 0;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            lastDownX = e.clientX;
+            document.body.style.cursor = 'col-resize';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const containerWidth = container.offsetWidth;
+            let newEditorWidth = editorContainer.offsetWidth + (e.clientX - lastDownX);
+            if (newEditorWidth < 100) newEditorWidth = 100;
+            if (newEditorWidth > containerWidth - 100) newEditorWidth = containerWidth - 100;
+            editorContainer.style.flex = `0 0 ${newEditorWidth}px`;
+            previewContainer.style.flex = `1 1 0`;
+            lastDownX = e.clientX;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = '';
+        });
+
+        // --------- 互動式表格欄寬拖拉功能 ---------
+        function makeTableResizable(table) {
+            const ths = table.querySelectorAll('th');
+            ths.forEach((th, i) => {
+                if (i === ths.length - 1) return; // 最後一欄不加拖拉把手
+                const resizer = document.createElement('div');
+                resizer.style.position = 'absolute';
+                resizer.style.right = '0';
+                resizer.style.top = '0';
+                resizer.style.width = '6px';
+                resizer.style.height = '100%';
+                resizer.style.cursor = 'col-resize';
+                resizer.style.userSelect = 'none';
+                resizer.style.zIndex = '10';
+                resizer.className = 'table-col-resizer';
+                th.style.position = 'relative';
+                th.appendChild(resizer);
+
+                let startX, startWidth, nextStartWidth, nextTh;
+
+                resizer.addEventListener('mousedown', function(e) {
+                    startX = e.clientX;
+                    startWidth = th.offsetWidth;
+                    nextTh = th.nextElementSibling;
+                    nextStartWidth = nextTh ? nextTh.offsetWidth : 0;
+                    document.body.style.cursor = 'col-resize';
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+
+                function onMouseMove(e) {
+                    const dx = e.clientX - startX;
+                    if (startWidth + dx > 40) th.style.width = (startWidth + dx) + 'px';
+                    if (nextTh && nextStartWidth - dx > 40) nextTh.style.width = (nextStartWidth - dx) + 'px';
+                }
+
+                function onMouseUp() {
+                    document.body.style.cursor = '';
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+            });
+        }
+
+        function renderPreview() {
+            preview.innerHTML = marked.parse(editor.value);
+            // 對所有表格加上欄寬拖拉功能
+            preview.querySelectorAll('table').forEach(makeTableResizable);
+        }
+
+        // 初始化內容
+        editor.value = `# Welcome to Markdown Editor
+
+This is a **live preview** Markdown editor.
+
+## Features
+- Split view with resizable panels
+- Live preview
+- Markdown support
+
+## Example Table
+| 標題（英文） | 標題（中文翻譯） | 備註 |
+|--------------|------------------|------|
+| Pfizer Inks Up to $6B Deal to Market 3SBio's Cancer Drug Outside China | 輝瑞簽署高達 60 億美元協議，在中國境外銷售三生製藥的抗癌藥物 | |
+| Beijing's hold over rare metals, China cuts | 《南華早報》每日要聞：北京對稀有金屬的管控，中國下調關鍵利率 | |
+
+\`\`\`javascript
+// Example code
+function hello() {
+    console.log("Hello, World!");
+}
+\`\`\`
+
+> This is a blockquote
+
+Try editing this text to see the live preview!`;
+
+        renderPreview();
     </script>
 </body>
 </html> 
